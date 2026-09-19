@@ -1,0 +1,8 @@
+[package]
+name = "m3u-lint"
+version = "0.1.0"
+edition = "2021"
+license = "MIT"
+description = "Strict-by-default M3U/M3U8 playlist parser with a CLI on top"
+
+[dependencies]
