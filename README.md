@@ -70,12 +70,18 @@ let playlist = parse(&text, &ParseOptions { lenient: true })?;
 for entry in &playlist.entries {
     println!("{:?} — {}", entry.title, entry.path);
 }
+
+// Playlist implements Display, so it serializes back to M3U text.
+// An entry only gets an #EXTINF line if it actually has duration
+// metadata; a bare path round-trips as a bare path.
+let text = playlist.to_string();
 ```
 
 ## Status
 
-Early. Parsing works and is tested; there's no writer yet and no
-support for extended tags beyond `#EXTINF`. See the issues for what's
+Early. Parsing and writing both work and are tested; there's no
+support yet for extended tags beyond `#EXTINF`, and nothing checks
+that referenced paths exist on disk. See the issues for what's
 planned next.
 
 ## License

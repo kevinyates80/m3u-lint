@@ -45,6 +45,26 @@ impl Playlist {
     }
 }
 
+/// Serializes back to M3U text. Always starts with `#EXTM3U`, and emits
+/// an `#EXTINF` line before an entry only if it actually carries
+/// duration metadata, so an entry with no metadata round-trips as a
+/// bare path rather than gaining a fake `#EXTINF:-1,` line.
+impl fmt::Display for Playlist {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        writeln!(f, "#EXTM3U")?;
+        for entry in &self.entries {
+            if let Some(duration) = entry.duration_secs {
+                match &entry.title {
+                    Some(title) => writeln!(f, "#EXTINF:{duration},{title}")?,
+                    None => writeln!(f, "#EXTINF:{duration}")?,
+                }
+            }
+            writeln!(f, "{}", entry.path)?;
+        }
+        Ok(())
+    }
+}
+
 /// Everything that can go wrong while parsing, in strict mode.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub enum ParseError {
@@ -228,5 +248,52 @@ mod tests {
         let input = "#EXTM3U\n#EXTINF:-1,Live Stream\nhttp://example.com/stream\n";
         let playlist = parse(input, &ParseOptions::default()).unwrap();
         assert_eq!(playlist.total_duration_secs(), None);
+    }
+
+    #[test]
+    fn writes_extinf_line_only_when_metadata_present() {
+        let playlist = Playlist {
+            entries: vec![
+                Entry {
+                    line: 0,
+                    duration_secs: Some(213),
+                    title: Some("Boards of Canada - Roygbiv".to_string()),
+                    path: "music/boc/roygbiv.flac".to_string(),
+                },
+                Entry {
+                    line: 0,
+                    duration_secs: Some(120),
+                    title: None,
+                    path: "music/untitled.mp3".to_string(),
+                },
+                Entry {
+                    line: 0,
+                    duration_secs: None,
+                    title: None,
+                    path: "music/plain.mp3".to_string(),
+                },
+            ],
+        };
+        let expected = "#EXTM3U\n\
+#EXTINF:213,Boards of Canada - Roygbiv\n\
+music/boc/roygbiv.flac\n\
+#EXTINF:120\n\
+music/untitled.mp3\n\
+music/plain.mp3\n";
+        assert_eq!(playlist.to_string(), expected);
+    }
+
+    #[test]
+    fn writer_output_round_trips_through_parser() {
+        let input = "#EXTM3U\n#EXTINF:213,Boards of Canada - Roygbiv\nmusic/boc/roygbiv.flac\n#EXTINF:-1,Live Radio\nhttp://stream.example/live\nplain/no_metadata.mp3\n";
+        let playlist = parse(input, &ParseOptions::default()).unwrap();
+        let reparsed = parse(&playlist.to_string(), &ParseOptions::default()).unwrap();
+
+        assert_eq!(playlist.entries.len(), reparsed.entries.len());
+        for (original, roundtripped) in playlist.entries.iter().zip(reparsed.entries.iter()) {
+            assert_eq!(original.duration_secs, roundtripped.duration_secs);
+            assert_eq!(original.title, roundtripped.title);
+            assert_eq!(original.path, roundtripped.path);
+        }
     }
 }
