@@ -1,16 +1,19 @@
 use std::env;
 use std::fs;
+use std::path::Path;
 use std::process::ExitCode;
 
 use m3u_lint::{parse, ParseOptions};
 
 fn main() -> ExitCode {
     let mut lenient = false;
+    let mut check_files = false;
     let mut path = None;
 
     for arg in env::args().skip(1) {
         match arg.as_str() {
             "--lenient" => lenient = true,
+            "--check-files" => check_files = true,
             "-h" | "--help" => {
                 print_usage();
                 return ExitCode::SUCCESS;
@@ -49,6 +52,16 @@ fn main() -> ExitCode {
                 Some(secs) => println!("total duration: {}", format_duration(secs)),
                 None => println!("total duration: unknown (some tracks missing length)"),
             }
+            if check_files {
+                let base = Path::new(&path).parent().unwrap_or_else(|| Path::new(""));
+                let missing = playlist.missing_files(base);
+                for entry in &missing {
+                    println!("line {}: file not found: {}", entry.line, entry.path);
+                }
+                if !missing.is_empty() {
+                    return ExitCode::FAILURE;
+                }
+            }
             ExitCode::SUCCESS
         }
         Err(e) => {
@@ -73,5 +86,5 @@ fn format_duration(total_secs: i64) -> String {
 }
 
 fn print_usage() {
-    eprintln!("usage: m3u-lint [--lenient] <playlist.m3u>");
+    eprintln!("usage: m3u-lint [--lenient] [--check-files] <playlist.m3u>");
 }

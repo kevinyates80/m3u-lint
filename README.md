@@ -52,7 +52,16 @@ broken.m3u: line 3: malformed #EXTINF line: "#EXTINF:oops,Title"
 $ m3u-lint --lenient broken.m3u
 broken.m3u: 4 tracks
 total duration: 12m 40s
+
+$ m3u-lint --check-files my_mix.m3u
+my_mix.m3u: 2 tracks
+total duration: unknown (some tracks missing length)
+line 3: file not found: music/boc/roygbiv.flac
 ```
+
+`--check-files` resolves relative paths against the playlist's own
+directory, skips entries that are URLs, and exits non-zero if anything
+is missing.
 
 ## Library usage
 
@@ -80,9 +89,8 @@ let text = playlist.to_string();
 ## Status
 
 Early. Parsing and writing both work and are tested; there's no
-support yet for extended tags beyond `#EXTINF`, and nothing checks
-that referenced paths exist on disk. See the issues for what's
-planned next.
+support yet for extended tags beyond `#EXTINF`, and duplicate tracks
+are not reported. See the issues for what's planned next.
 
 ## License
 

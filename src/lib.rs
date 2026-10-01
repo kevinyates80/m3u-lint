@@ -9,6 +9,7 @@
 //! dropped rather than causing a hard failure.
 
 use std::fmt;
+use std::path::Path;
 
 /// One track entry in a playlist.
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,6 +43,32 @@ impl Playlist {
             }
         }
         Some(total)
+    }
+
+    /// Entries whose path points at a local file that does not exist.
+    /// Relative paths are resolved against `base_dir`, which should be
+    /// the directory containing the playlist, since that is how players
+    /// resolve them. Entries that look like URLs are skipped: there is
+    /// no cheap, honest way to check those without network access.
+    pub fn missing_files(&self, base_dir: &Path) -> Vec<&Entry> {
+        self.entries
+            .iter()
+            .filter(|entry| !is_url(&entry.path))
+            .filter(|entry| !base_dir.join(&entry.path).exists())
+            .collect()
+    }
+}
+
+/// True for anything with a `scheme://` prefix. A scheme must start with
+/// a letter, which keeps Windows paths like `C:\music` from matching.
+fn is_url(path: &str) -> bool {
+    match path.split_once("://") {
+        Some((scheme, _)) => {
+            let mut chars = scheme.chars();
+            chars.next().map_or(false, |c| c.is_ascii_alphabetic())
+                && chars.all(|c| c.is_ascii_alphanumeric() || matches!(c, '+' | '-' | '.'))
+        }
+        None => false,
     }
 }
 
@@ -281,6 +308,30 @@ music/boc/roygbiv.flac\n\
 music/untitled.mp3\n\
 music/plain.mp3\n";
         assert_eq!(playlist.to_string(), expected);
+    }
+
+    #[test]
+    fn missing_files_checks_relative_paths_and_skips_urls() {
+        let dir = std::env::temp_dir().join(format!("m3u_lint_missing_{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        std::fs::write(dir.join("present.mp3"), b"").unwrap();
+
+        let input = "#EXTM3U\npresent.mp3\ngone.mp3\nhttp://example.com/live\n";
+        let playlist = parse(input, &ParseOptions::default()).unwrap();
+        let missing = playlist.missing_files(&dir);
+        std::fs::remove_dir_all(&dir).unwrap();
+
+        assert_eq!(missing.len(), 1);
+        assert_eq!(missing[0].path, "gone.mp3");
+        assert_eq!(missing[0].line, 3);
+    }
+
+    #[test]
+    fn url_detection_ignores_windows_drive_paths() {
+        assert!(is_url("https://example.com/a.mp3"));
+        assert!(is_url("rtsp://host/stream"));
+        assert!(!is_url("C:\\music\\a.mp3"));
+        assert!(!is_url("music/a.mp3"));
     }
 
     #[test]
